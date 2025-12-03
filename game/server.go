@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -11,7 +12,7 @@ import (
 
 const (
 	MaxPlayers      = 2
-	TurnTimeSeconds = 100 //time limit per turn
+	TurnTimeSeconds = 15 // time limit per turn (seconds)
 )
 
 const (
@@ -68,10 +69,11 @@ func StartServer() {
 		players = append(players, player)
 
 		log.Printf("Player %d connected\n", player.id)
-		writeToClient(conn, fmt.Sprintf("Welcome Player %d! Waiting for others...\n", player.id))
+		writeToClient(conn, "INFO",
+			fmt.Sprintf("Welcome Player %d! Waiting for others...\n", player.id))
 	}
 
-	broadcast(players, "All players connected. Game starting now!\n")
+	broadcast(players, "INFO", "All players connected. Game starting now!\n")
 
 	currentTurn := 0
 	consecutiveTimeouts := 0
@@ -81,17 +83,19 @@ func StartServer() {
 		secret := GenerateSecretCode()
 		log.Printf("DEBUG NEW SECRET: %d\n", secret)
 
-		broadcast(players, "New game started!\n")
+		broadcast(players, "NEWGAME", "New game started!\n")
 
-		for {
+		for { // single round loop
 			currentPlayer := players[currentTurn]
 
 			// Notify turns
 			for _, p := range players {
 				if p.id == currentPlayer.id {
-					writeToClient(p.conn, "TURN Your turn! Enter your guess:\n")
+					writeToClient(p.conn, "TURN",
+						"Your turn!\n")
 				} else {
-					writeToClient(p.conn, fmt.Sprintf("WAIT Waiting for Player %d...\n", currentPlayer.id))
+					writeToClient(p.conn, "WAIT",
+						fmt.Sprintf("Waiting for Player %d...\n", currentPlayer.id))
 				}
 			}
 
@@ -109,14 +113,14 @@ func StartServer() {
 					"Player %d ran out of time and forfeited the turn!\n",
 					currentPlayer.id,
 				)
-				broadcast(players, msg)
+				broadcast(players, "TIMEOUT", msg)
 
 				consecutiveTimeouts++
 
 				// ✅ GLOBAL RECOVERY MODE (ALL PLAYERS TIMED OUT)
 				if consecutiveTimeouts >= len(players) {
 
-					broadcast(players,
+					broadcast(players, "RECOVERY",
 						"All players timed out. Waiting for ANY player to resume...\n",
 					)
 
@@ -125,33 +129,47 @@ func StartServer() {
 						data   string
 					}
 
-					recoveryCh := make(chan recoveryInput, 1)
+					var resume recoveryInput
+					found := false
 
-					// ✅ Wait for input from ANY player
-					for _, p := range players {
-						go func(p *Player) {
-							_ = p.conn.SetReadDeadline(time.Time{})
+					// ✅ Synchronous, no goroutine spam, no shared-conn reads
+					for !found {
+						for _, p := range players {
+							// small per-player poll timeout so we can rotate players
+							_ = p.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 
 							buf := make([]byte, 1024)
 							n, err := p.conn.Read(buf)
 							if err != nil {
-								return
+								if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+									// just move to next player
+									continue
+								}
+								// some other error, log and skip
+								log.Printf("Error during recovery read from player %d: %v", p.id, err)
+								continue
 							}
 
+							// reset deadline after successful read
+							_ = p.conn.SetReadDeadline(time.Time{})
+
 							guess := strings.TrimSpace(string(buf[:n]))
-							recoveryCh <- recoveryInput{
+							resume = recoveryInput{
 								player: p,
 								data:   guess,
 							}
-						}(p)
+							found = true
+							break
+						}
 					}
 
-					resume := <-recoveryCh
-
+					// ✅ Process the recovery guess exactly like before
 					numGuess, err := ValidateGuess(resume.data)
 					if err != nil {
-						writeToClient(resume.player.conn, "Invalid input: "+err.Error()+"\n")
+						writeToClient(resume.player.conn, "INFO",
+							"Invalid input: "+err.Error()+"\n")
 						consecutiveTimeouts = 0
+						// same behavior: give turn back to this player index
 						currentTurn = resume.player.id - 1
 						continue
 					}
@@ -159,6 +177,7 @@ func StartServer() {
 					feedback := GenerateFeedback(secret, numGuess, gameRng)
 					analytics.GuessFrequency[numGuess]++
 
+					// ✅ WIN CASE in recovery
 					if feedback.CorrectPlace == CodeLength {
 
 						winMsg := fmt.Sprintf(
@@ -177,20 +196,22 @@ func StartServer() {
 						}
 
 						prefix := GenerateTimestampPrefix()
-						broadcast(players, prefix+winMsg)
-						broadcast(players, "NEWGAME New game starting in 3 seconds...\n")
+						broadcast(players, "WIN", prefix+winMsg)
+						broadcast(players, "NEWGAME",
+							"New game starting in 3 seconds...\n")
 						printAnalytics(analytics)
 
 						time.Sleep(3 * time.Second)
 
 						consecutiveTimeouts = 0
+						// next turn after winner
 						currentTurn = resume.player.id % len(players)
 						break // ✅ EXIT INNER LOOP → STARTS NEW GAME
 					}
 
-					/* ✅ NORMAL RECOVERY RESULT PATH */
+					// ✅ NORMAL RECOVERY RESULT PATH (no win)
 					msg := fmt.Sprintf(
-						ColorBlue+"RESULT player: %d\n"+
+						ColorBlue+"player: %d\n"+
 							ColorCyan+"Number guessed: %d\n"+
 							ColorGreen+"Correctly placed: %d\n"+
 							ColorYellow+"Wrongly placed: %d\n"+
@@ -203,21 +224,21 @@ func StartServer() {
 					)
 
 					prefix := GenerateTimestampPrefix()
-					broadcast(players, prefix+msg)
+					broadcast(players, "RESULT", prefix+msg)
 
 					consecutiveTimeouts = 0
 					currentTurn = resume.player.id % len(players)
 					continue
 				}
 
-				// ✅ NORMAL TIMEOUT FLOW
+				// ✅ NORMAL TIMEOUT FLOW (not all timed out yet)
 				currentTurn = (currentTurn + 1) % len(players)
 				drainLateInput(currentPlayer.conn)
 				continue
 			}
 
 			if err != nil {
-				log.Printf("Player %d disconnected\n", currentPlayer.id)
+				log.Printf("Player %d disconnected: %v\n", currentPlayer.id, err)
 				return
 			}
 
@@ -226,7 +247,8 @@ func StartServer() {
 			guess := strings.TrimSpace(string(buffer[:n]))
 			numGuess, err := ValidateGuess(guess)
 			if err != nil {
-				writeToClient(currentPlayer.conn, "Invalid input: "+err.Error()+"\n")
+				writeToClient(currentPlayer.conn, "INFO",
+					"Invalid input: "+err.Error()+"\n")
 				continue
 			}
 
@@ -255,8 +277,9 @@ func StartServer() {
 				}
 
 				prefix := GenerateTimestampPrefix()
-				broadcast(players, prefix+msg)
-				broadcast(players, "NEWGAME New game starting in 3 seconds...\n")
+				broadcast(players, "WIN", prefix+msg)
+				broadcast(players, "NEWGAME",
+					"New game starting in 3 seconds...\n")
 				printAnalytics(analytics)
 
 				time.Sleep(3 * time.Second)
@@ -278,14 +301,14 @@ func StartServer() {
 			)
 
 			prefix := GenerateTimestampPrefix()
-			broadcast(players, prefix+msg)
+			broadcast(players, "RESULT", prefix+msg)
 
 			currentTurn = (currentTurn + 1) % len(players)
 		}
 	}
 }
 
-// ✅ Proper socket drain
+// ✅ Proper socket drain (unchanged logic)
 func drainLateInput(conn net.Conn) {
 	_ = conn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
 
@@ -303,15 +326,25 @@ func drainLateInput(conn net.Conn) {
 	_ = conn.SetReadDeadline(time.Time{})
 }
 
-// Broadcast helper
-func broadcast(players []*Player, msg string) {
+// ✅ JSON broadcast helper: keeps your strings & colors as-is
+func broadcast(players []*Player, msgType, msg string) {
 	for _, p := range players {
-		writeToClient(p.conn, msg)
+		writeToClient(p.conn, msgType, msg)
 	}
 }
 
-func writeToClient(conn net.Conn, s string) {
-	_, err := conn.Write([]byte(s))
+func writeToClient(conn net.Conn, msgType string, text string) {
+	msg := Message{
+		Type: msgType,
+		Text: text,
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Error marshaling message: %v", err)
+		return
+	}
+
+	_, err = conn.Write(append(data, '\n'))
 	if err != nil {
 		log.Printf("Error writing to client: %v", err)
 	}

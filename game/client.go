@@ -2,6 +2,7 @@ package game
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -9,7 +10,6 @@ import (
 )
 
 func StartClient(address string) error {
-	// Connect to the server
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return fmt.Errorf("error connecting to server: %v", err)
@@ -18,68 +18,89 @@ func StartClient(address string) error {
 
 	fmt.Println("Connected to Code Breaker server. Waiting for game updates...")
 
-	reader := bufio.NewReader(os.Stdin)
+	decoder := json.NewDecoder(conn)
 
-	for {
-		// Read message from server
-		buffer := make([]byte, 1024)
-		n, err := conn.Read(buffer)
-		if err != nil {
-			return fmt.Errorf("error reading from server: %v", err)
+	// ✅ Channel for server messages
+	serverMsgCh := make(chan Message)
+
+	// ✅ Channel for user input
+	inputCh := make(chan string)
+
+	// ✅ SERVER READER GOROUTINE (never blocks main loop)
+	go func() {
+		for {
+			var msg Message
+			if err := decoder.Decode(&msg); err != nil {
+				close(serverMsgCh)
+				return
+			}
+			serverMsgCh <- msg
 		}
+	}()
 
-		serverMsg := string(buffer[:n])
-		fmt.Print(serverMsg) // print whatever the server sent
+	// ✅ STDIN READER GOROUTINE (never blocks main loop)
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				close(inputCh)
+				return
+			}
+			inputCh <- strings.TrimSpace(line)
+		}
+	}()
 
-		lines := strings.Split(serverMsg, "\n")
+	isMyTurn := false
 
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
+	// ✅ SINGLE EVENT LOOP — handles BOTH server + user input
+	for {
+		select {
+
+		// ✅ SERVER MESSAGE
+		case msg, ok := <-serverMsgCh:
+			if !ok {
+				return fmt.Errorf("server disconnected")
 			}
 
-			fields := strings.Fields(line)
-			if len(fields) == 0 {
-				continue
-			}
+			// Always print server text
+			fmt.Print(msg.Text)
 
-			switch fields[0] {
-
+			switch msg.Type {
 			case "TURN":
-				fmt.Print("Your turn. Enter your guess: ")
+				isMyTurn = true
+				fmt.Print("Your guess: ")
 
-				guess, err := reader.ReadString('\n')
-				if err != nil {
-					return fmt.Errorf("error reading input: %v", err)
-				}
-				guess = strings.TrimSpace(guess)
+			case "RECOVERY":
+				// ✅ SPECIAL MODE: allow ANY player to type
+				isMyTurn = true
+				fmt.Print("Recovery guess allowed: ")
 
-				if guess == "exit" {
-					fmt.Println("Exiting the game.")
-					return nil
-				}
+			case "WAIT", "TIMEOUT", "RESULT", "WIN", "NEWGAME", "INFO":
+				isMyTurn = false
+			}
 
-				_, err = conn.Write([]byte(guess))
-				if err != nil {
-					return fmt.Errorf("error sending guess: %v", err)
-				}
+		// ✅ USER INPUT
+		case guess, ok := <-inputCh:
+			if !ok {
+				return nil
+			}
 
-			case "WAIT":
-				// Do nothing, just wait silently
+			if !isMyTurn {
+				// ❌ Input when it's NOT your turn → safely ignore
+				continue
+			}
 
-			case "RESULT":
-				// Already printed above
+			isMyTurn = false
 
-			case "TIMEOUT":
-				// Already printed above
+			if guess == "exit" {
+				fmt.Println("Exiting game...")
+				return nil
+			}
 
-			case "WIN":
-				fmt.Println("Game won! Waiting for restart...")
-
-			case "NEWGAME":
-				fmt.Println("New game starting...")
-
+			_, err = conn.Write([]byte(guess + "\n"))
+			if err != nil {
+				return err
 			}
 		}
 	}
