@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  server:
+    build: .
+    image: codebreaker-game
+    container_name: codebreaker-server
+    ports:
+      - "8080:8080"
+    command: ["server"]
+
+  # Optional: example interactive client containers.
+  # In practice it's much nicer to run clients on the host.
+
+  client1:
+    image: codebreaker-game
+    container_name: codebreaker-client1
+    depends_on:
+      - server
+    stdin_open: true
+    tty: true
+    environment:
+      - CODEBREAKER_ADDR=codebreaker-server:8080
+    command: ["client"]
+
+  client2:
+    image: codebreaker-game
+    container_name: codebreaker-client2
+    depends_on:
+      - server
+    stdin_open: true
+    tty: true
+    environment:
+      - CODEBREAKER_ADDR=codebreaker-server:8080
+    command: ["client"]
