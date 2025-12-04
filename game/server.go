@@ -6,12 +6,15 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"sort"
 	"strings"
 	"time"
 )
 
 const (
 	MaxPlayers      = 2
+	CodeLength      = 4
+	difficulty      = DifficultyHard
 	TurnTimeSeconds = 15 // time limit per turn (seconds)
 )
 
@@ -31,10 +34,10 @@ type Player struct {
 }
 
 type Analytics struct {
-	GamesPlayed    int
-	WinsByPlayer   map[int]int
-	LossesByPlayer map[int]int
-	GuessFrequency map[int]int
+	GamesPlayed     int
+	WinsByPlayer    map[int]int
+	LossesByPlayer  map[int]int
+	GuessesUntilWin map[int]int
 }
 
 func StartServer() {
@@ -50,9 +53,9 @@ func StartServer() {
 	var players []*Player
 
 	analytics := &Analytics{
-		WinsByPlayer:   make(map[int]int),
-		LossesByPlayer: make(map[int]int),
-		GuessFrequency: make(map[int]int),
+		WinsByPlayer:    make(map[int]int),
+		LossesByPlayer:  make(map[int]int),
+		GuessesUntilWin: make(map[int]int),
 	}
 
 	// Accept players
@@ -80,8 +83,10 @@ func StartServer() {
 
 	for { // GAME LOOP (infinite rounds)
 
-		secret := GenerateSecretCode()
+		SetCodeDigits(CodeLength)
+		secret := GenerateSecretCodeWithDifficulty(CodeLength, difficulty)
 		log.Printf("DEBUG NEW SECRET: %d\n", secret)
+		currentGameGuesses := 0
 
 		broadcast(players, "NEWGAME", "New game started!\n")
 
@@ -175,7 +180,7 @@ func StartServer() {
 					}
 
 					feedback := GenerateFeedback(secret, numGuess, gameRng)
-					analytics.GuessFrequency[numGuess]++
+					currentGameGuesses++
 
 					// ✅ WIN CASE in recovery
 					if feedback.CorrectPlace == CodeLength {
@@ -187,7 +192,8 @@ func StartServer() {
 						)
 
 						analytics.GamesPlayed++
-						analytics.WinsByPlayer[resume.player.id]++
+						analytics.WinsByPlayer[currentPlayer.id]++
+						analytics.GuessesUntilWin[secret] = currentGameGuesses
 
 						for _, p := range players {
 							if p.id != resume.player.id {
@@ -255,7 +261,7 @@ func StartServer() {
 			consecutiveTimeouts = 0 // ✅ VALID INPUT BREAKS TIMEOUT CHAIN
 
 			feedback := GenerateFeedback(secret, numGuess, gameRng)
-			analytics.GuessFrequency[numGuess]++
+			currentGameGuesses++
 
 			var msg string
 
@@ -266,9 +272,9 @@ func StartServer() {
 					currentPlayer.id,
 					secret,
 				)
-
 				analytics.GamesPlayed++
 				analytics.WinsByPlayer[currentPlayer.id]++
+				analytics.GuessesUntilWin[secret] = currentGameGuesses
 
 				for _, p := range players {
 					if p.id != currentPlayer.id {
@@ -362,17 +368,44 @@ func printAnalytics(a *Analytics) {
 		log.Printf("Player %d Losses: %d\n", pid, losses)
 	}
 
-	hardest := make([]int, 0)
-	for num, freq := range a.GuessFrequency {
-		if freq >= 5 {
-			hardest = append(hardest, num)
-		}
+	// ✅ Convert map to sortable slice
+	type hardEntry struct {
+		secret  int
+		guesses int
 	}
 
-	if len(hardest) > 0 {
-		log.Printf("Hardest-to-guess candidates (freq >=5): %v\n", hardest)
+	hardList := make([]hardEntry, 0)
+
+	for secret, guesses := range a.GuessesUntilWin {
+		hardList = append(hardList, hardEntry{
+			secret:  secret,
+			guesses: guesses,
+		})
+	}
+
+	// ✅ Sort by guesses DESCENDING (hardest first)
+	sort.Slice(hardList, func(i, j int) bool {
+		return hardList[i].guesses > hardList[j].guesses
+	})
+
+	// ✅ Print ONLY top 5
+	limit := 5
+	if len(hardList) < limit {
+		limit = len(hardList)
+	}
+
+	if limit > 0 {
+		log.Println("Top hardest secrets (by guesses until win):")
+		for i := 0; i < limit; i++ {
+			log.Printf(
+				"#%d Secret: %d | Guesses until win: %d\n",
+				i+1,
+				hardList[i].secret,
+				hardList[i].guesses,
+			)
+		}
 	} else {
-		log.Println("No hardest numbers identified yet")
+		log.Println("No completed games yet to determine hardest secrets.")
 	}
 
 	log.Println("============================")

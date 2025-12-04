@@ -52,6 +52,7 @@ func StartClient(address string) error {
 	}()
 
 	isMyTurn := false
+	lastPrinted := Message{}
 
 	// ✅ SINGLE EVENT LOOP — handles BOTH server + user input
 	for {
@@ -64,7 +65,10 @@ func StartClient(address string) error {
 			}
 
 			// Always print server text
-			fmt.Print(msg.Text)
+			if msg.Type != lastPrinted.Type || msg.Text != lastPrinted.Text {
+				fmt.Print(msg.Text)
+				lastPrinted = msg
+			}
 
 			switch msg.Type {
 			case "TURN":
@@ -80,14 +84,14 @@ func StartClient(address string) error {
 				isMyTurn = false
 			}
 
-		// ✅ USER INPUT
+		// USER INPUT
 		case guess, ok := <-inputCh:
 			if !ok {
 				return nil
 			}
 
 			if !isMyTurn {
-				// ❌ Input when it's NOT your turn → safely ignore
+				// Input when it's NOT your turn → safely ignore
 				continue
 			}
 

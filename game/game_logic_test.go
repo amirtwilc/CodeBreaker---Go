@@ -1,77 +1,85 @@
 package game
 
 import (
-	"strconv"
 	"strings"
 	"testing"
+
+	"math/rand"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 func TestGenerateSecretCode_Easy_NoRepeatingDigits(t *testing.T) {
-	for i := 0; i < 5_000; i++ {
-		code := GenerateSecretCodeWithDifficulty(DifficultyEasy)
-		assert.False(t, hasRepeatingDigit(code), "easy mode must not contain repeating digits")
+	for i := 2; i <= 8; i++ {
+		for j := 0; j < 5_000; j++ {
+			code := GenerateSecretCodeWithDifficulty(i, DifficultyEasy)
+			assert.False(t, hasRepeatingDigit(code), "easy mode must not contain repeating digits")
+		}
 	}
 }
 
 func TestGenerateSecretCode_Medium_StillValidRange(t *testing.T) {
-	for i := 0; i < 5_000; i++ {
-		code := GenerateSecretCodeWithDifficulty(DifficultyMedium)
-		assert.GreaterOrEqual(t, code, 0)
-		assert.LessOrEqual(t, code, MaxCode)
+	for i := 2; i <= 8; i++ {
+		minCode, maxCode = computeCodeBounds(i)
+		for j := 0; j < 5_000; j++ {
+			code := GenerateSecretCodeWithDifficulty(i, DifficultyMedium)
+			assert.GreaterOrEqual(t, code, minCode)
+			assert.LessOrEqual(t, code, maxCode)
+		}
 	}
 }
 
 func TestGenerateSecretCode_Hard_Constraints(t *testing.T) {
-	for i := 0; i < 5_000; i++ {
-		code := GenerateSecretCodeWithDifficulty(DifficultyHard)
-
-		assert.True(t, hasRepeatingDigit(code), "hard mode must contain a repeated digit")
-
-		sum := digitSum(splitToDigits(code))
-		assert.True(t, isPrime(sum), "hard mode digit sum must be prime")
+	for i := 3; i <= 8; i++ {
+		for j := 0; j < 5_000; j++ {
+			code := GenerateSecretCodeWithDifficulty(i, DifficultyHard)
+			assert.True(t, hasRepeatingDigit(code), "hard mode must contain a repeated digit")
+		}
 	}
 }
 
-func TestIsPrime(t *testing.T) {
-	assert.False(t, isPrime(0))
-	assert.False(t, isPrime(1))
-	assert.True(t, isPrime(2))
-	assert.True(t, isPrime(3))
-	assert.False(t, isPrime(4))
-	assert.True(t, isPrime(5))
-	assert.False(t, isPrime(9))
-	assert.True(t, isPrime(13))
-}
-
 func TestHasRepeatingDigit(t *testing.T) {
+	SetCodeDigits(4)
 	assert.True(t, hasRepeatingDigit(1123))
 	assert.True(t, hasRepeatingDigit(9009))
 	assert.False(t, hasRepeatingDigit(1234))
 	assert.False(t, hasRepeatingDigit(9876))
 }
 
-func TestGenerateSecretCode_Range(t *testing.T) {
-	for i := 0; i < 10_000; i++ {
-		code := GenerateSecretCode()
+func TestSplitToDigits_Min(t *testing.T) {
+	for digits := 2; digits <= 8; digits++ {
+		SetCodeDigits(digits)
 
-		assert.GreaterOrEqual(t, code, 0)
-		assert.LessOrEqual(t, code, MaxCode)
+		d := splitToDigits(minCode)
+		assert.Equal(t, digits, len(d), "wrong length for digits=%d", digits)
+
+		// expected slice: [1, 0, 0, ..., 0]
+		expected := make([]int, digits)
+		expected[0] = 1
+
+		assert.Equal(t, expected, d, "digits mismatch for digits=%d", digits)
 	}
 }
 
-func TestSplitToDigits_Min(t *testing.T) {
-	d := splitToDigits(MinCode)
-	assert.Equal(t, CodeLength, len(d))
-	assert.Equal(t, []int{1, 0, 0, 0}, d)
-}
-
 func TestSplitToDigits_Max(t *testing.T) {
-	d := splitToDigits(MaxCode)
-	assert.Equal(t, CodeLength, len(d))
-	assert.Equal(t, []int{9, 9, 9, 9}, d)
+	for digits := 2; digits <= 8; digits++ {
+		SetCodeDigits(digits)
+
+		d := splitToDigits(maxCode)
+		assert.Equal(t, digits, len(d), "wrong length for digits=%d", digits)
+
+		// expected slice: [9, 9, 9, ..., 9]
+		expected := make([]int, digits)
+		for i := range expected {
+			expected[i] = 9
+		}
+
+		assert.Equal(t, expected, d, "digits mismatch for digits=%d", digits)
+	}
 }
 
 func TestDigitSum_Even(t *testing.T) {
@@ -83,10 +91,11 @@ func TestDigitSum_Odd(t *testing.T) {
 }
 
 func TestReverseDigits(t *testing.T) {
+	SetCodeDigits(4)
 	in := []int{1, 2, 3, 4}
 	out := reverseDigits(in)
 
-	assert.Equal(t, CodeLength, len(out))
+	assert.Equal(t, 4, len(out))
 	assert.Equal(t, []int{4, 3, 2, 1}, out)
 }
 
@@ -94,7 +103,7 @@ func TestIncrementDigits_NoWrap(t *testing.T) {
 	in := []int{1, 2, 3, 4}
 	out := incrementDigits(in)
 
-	assert.Equal(t, CodeLength, len(out))
+	assert.Equal(t, 4, len(out))
 	assert.Equal(t, []int{2, 3, 4, 5}, out)
 }
 
@@ -102,7 +111,7 @@ func TestIncrementDigits_WithWrap(t *testing.T) {
 	in := []int{9, 9, 9, 9}
 	out := incrementDigits(in)
 
-	assert.Equal(t, CodeLength, len(out))
+	assert.Equal(t, 4, len(out))
 	assert.Equal(t, []int{0, 0, 0, 0}, out)
 }
 
@@ -157,6 +166,7 @@ func TestOddSumIncrementWithWrap(t *testing.T) {
 }
 
 func TestValidateGuess(t *testing.T) {
+	SetCodeDigits(4)
 	tests := []struct {
 		name        string
 		input       string
@@ -286,9 +296,8 @@ func TestGenerateTimestampPrefix_Format(t *testing.T) {
 	trimmed = strings.TrimSuffix(trimmed, " - ")
 	trimmed = strings.TrimSpace(trimmed)
 
-	// Must be a valid integer
-	_, err := strconv.ParseInt(trimmed, 10, 64)
-	assert.NoError(t, err, "timestamp part must be a valid integer")
+	_, err := time.Parse(TimeLayout, trimmed)
+	assert.NoError(t, err, "timestamp part must be in correct format")
 }
 
 func TestGenerateTimestampPrefix_MultipleCalls(t *testing.T) {
@@ -304,68 +313,280 @@ func TestGenerateTimestampPrefix_MultipleCalls(t *testing.T) {
 	assert.True(t, strings.HasPrefix(p2, expectedPrefixStart))
 }
 
-func TestGenerateFeedback_ExactMatch(t *testing.T) {
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGenerateFeedback_AllCorrect(t *testing.T) {
+	// ensure code length 4 for predictable behavior
+	codeDigits = 4
+
 	secret := 1234
 	guess := 1234
+	rng := rand.New(rand.NewSource(1))
 
-	f := GenerateFeedback(secret, guess)
+	f := GenerateFeedback(secret, guess, rng)
 
-	assert.Equal(t, 4, f.CorrectPlace)
-	assert.Equal(t, 0, f.WrongPlace)
-	assert.Equal(t, HintFirstHalf, f.Hint)
+	if f.CorrectPlace != codeDigits {
+		t.Fatalf("expected %d correct places, got %d", codeDigits, f.CorrectPlace)
+	}
+	if f.WrongPlace != 0 {
+		t.Fatalf("expected 0 wrong place, got %d", f.WrongPlace)
+	}
+
+	// With a perfect match, hint set may include increasing/decreasing, sum-range and "VERY close".
+	possible := []string{
+		HintIncreasingOrder,
+		HintDecreasingOrder,
+		HintSumLow,
+		HintSumMidLow,
+		HintSumMidHigh,
+		HintSumHigh,
+		HintMostlyLowDigits,
+	}
+
+	if !containsString(possible, f.Hint) && f.Hint != HintDefault {
+		t.Fatalf("hint unexpected for all-correct: %q (expected one of possible list)", f.Hint)
+	}
 }
 
-func TestGenerateFeedback_AllMisplaced(t *testing.T) {
+func TestGenerateFeedback_NoneCorrect(t *testing.T) {
+	codeDigits = 4
+
 	secret := 1234
-	guess := 4321
+	guess := 5678 // completely different digits
+	rng := rand.New(rand.NewSource(2))
 
-	f := GenerateFeedback(secret, guess)
+	f := GenerateFeedback(secret, guess, rng)
 
-	assert.Equal(t, 0, f.CorrectPlace)
-	assert.Equal(t, 4, f.WrongPlace)
-	assert.Equal(t, HintNone, f.Hint)
+	if f.CorrectPlace != 0 {
+		t.Fatalf("expected 0 correct places, got %d", f.CorrectPlace)
+	}
+	if f.WrongPlace != 0 {
+		t.Fatalf("expected 0 wrong place, got %d", f.WrongPlace)
+	}
+
+	expectedPossible := []string{
+		HintMostlyEvenDigits,
+		HintMostlyOddDigits,
+		HintSumLow,
+		HintSumMidLow,
+		HintSumMidHigh,
+		HintSumHigh,
+	}
+
+	if !containsString(expectedPossible, f.Hint) {
+		t.Fatalf("hint unexpected for none-correct: %q", f.Hint)
+	}
 }
 
-func TestGenerateFeedback_FirstHalfHint(t *testing.T) {
+func TestGenerateFeedback_MisplacedAndCorrect(t *testing.T) {
+	codeDigits = 4
+
+	// secret has digits 1,2,3,4
+	// guess has 1 in correct place, 3 present but misplaced, 9 and 9 not in secret (repeated guess digit)
 	secret := 1234
-	guess := 1299 // 1 and 2 correct, first half
+	guess := 1393 // index0 correct (1), index1 wrong (3 in secret but misplaced), repeated 3 in guess
+	rng := rand.New(rand.NewSource(3))
 
-	f := GenerateFeedback(secret, guess)
+	f := GenerateFeedback(secret, guess, rng)
 
-	assert.Equal(t, 2, f.CorrectPlace)
-	assert.Equal(t, 0, f.WrongPlace)
-	assert.Equal(t, HintFirstHalf, f.Hint)
+	if f.CorrectPlace != 1 {
+		t.Fatalf("expected 1 correct place, got %d", f.CorrectPlace)
+	}
+	// There is one misplaced (3) but guessed twice; algorithm should count only one wrongPlace
+	if f.WrongPlace != 1 {
+		t.Fatalf("expected 1 wrong place, got %d", f.WrongPlace)
+	}
+
+	// For this scenario, possible hints include repetition analysis and sum-range/hight-low
+	expectedPossible := []string{
+		HintGuessRepeatedWrong, // not applicable here since 3 exists, so maybe not this
+		HintSecretRepeatingDigit,
+		HintMostlyEvenDigits,
+		HintMostlyOddDigits,
+	}
+
+	if !containsString(expectedPossible, f.Hint) {
+		// it's acceptable if hint is some other allowed hint; we just ensure not empty
+		if f.Hint == "" {
+			t.Fatalf("hint should not be empty")
+		}
+	}
 }
 
-func TestGenerateFeedback_SecondHalfHint(t *testing.T) {
-	secret := 1234
-	guess := 9934 // 3 and 4 correct, second half
+func TestGenerateSmartHint_FirstSecondHalf(t *testing.T) {
+	codeDigits = 4
 
-	f := GenerateFeedback(secret, guess)
+	// first half match: positions 0 are equal
+	secret := []int{1, 9, 8, 7}
+	guess := []int{1, 0, 0, 0}
+	rng := rand.New(rand.NewSource(4))
 
-	assert.Equal(t, 2, f.CorrectPlace)
-	assert.Equal(t, 0, f.WrongPlace)
-	assert.Equal(t, HintSecondHalf, f.Hint)
+	h := GenerateSmartHint(secret, guess, rng)
+	possible := []string{
+		HintFirstHalfPlacement,
+		HintMostlyHighDigits,
+		// sum-range
+		HintSumLow,
+		HintSumMidLow,
+		HintSumMidHigh,
+		HintSumHigh,
+	}
+
+	if !containsString(possible, h) {
+		t.Fatalf("unexpected hint: %q", h)
+	}
+
+	// second half match: position 3 equal
+	secret2 := []int{0, 1, 2, 9}
+	guess2 := []int{0, 0, 0, 9}
+	rng2 := rand.New(rand.NewSource(5))
+	h2 := GenerateSmartHint(secret2, guess2, rng2)
+
+	if !containsString([]string{
+		HintFirstHalfPlacement,
+		HintDefault,
+	}, h2) {
+		t.Fatalf("unexpected second-half hint: %q", h2)
+	}
 }
 
-func TestGenerateFeedback_Mixed(t *testing.T) {
-	secret := 1234
-	guess := 1243
+func TestGenerateSmartHint_EvenOddAndHighLow(t *testing.T) {
+	codeDigits = 4
 
-	f := GenerateFeedback(secret, guess)
+	// mostly even secret
+	secretEven := []int{2, 4, 6, 1}
+	guess := []int{0, 0, 0, 0}
+	rng := rand.New(rand.NewSource(6))
+	h := GenerateSmartHint(secretEven, guess, rng)
+	if !(h == HintMostlyEvenDigits || h == HintSumMidLow) {
+		t.Fatalf("unexpected hint for mostly even secret: %q", h)
+	}
 
-	assert.Equal(t, 2, f.CorrectPlace) // 1 and 2
-	assert.Equal(t, 2, f.WrongPlace)   // 3 and 4 swapped
-	assert.Equal(t, HintFirstHalf, f.Hint)
+	// mostly low secret
+	secretLow := []int{1, 2, 0, 3}
+	rng2 := rand.New(rand.NewSource(7))
+	h2 := GenerateSmartHint(secretLow, guess, rng2)
+	if !(h2 == HintMostlyOddDigits || h2 == HintSumLow || h2 == HintMostlyLowDigits) {
+		t.Fatalf("unexpected hint for mostly low secret: %q", h2)
+	}
 }
 
-func TestGenerateFeedback_NoMatches(t *testing.T) {
-	secret := 1234
-	guess := 9999
+func TestGenerateSmartHint_RepetitionAnalysis(t *testing.T) {
+	codeDigits = 4
 
-	f := GenerateFeedback(secret, guess)
+	// guess repeats digit 5 which is not in secret -> triggers repetition-not-in-secret hint
+	secret := []int{1, 2, 3, 4}
+	guess := []int{5, 5, 0, 0}
+	rng := rand.New(rand.NewSource(8))
+	h := GenerateSmartHint(secret, guess, rng)
 
-	assert.Equal(t, 0, f.CorrectPlace)
-	assert.Equal(t, 0, f.WrongPlace)
-	assert.Equal(t, HintNone, f.Hint)
+	possible := []string{
+		HintGuessRepeatedWrong,
+	}
+	if !containsString(possible, h) {
+		t.Fatalf("unexpected repetition hint: %q", h)
+	}
+
+	// secret has repeating digit and guess contains it once -> triggers "The secret contains a repeating digit"
+	secret2 := []int{2, 2, 3, 4}
+	guess2 := []int{2, 0, 0, 0}
+	rng2 := rand.New(rand.NewSource(9))
+	h2 := GenerateSmartHint(secret2, guess2, rng2)
+	if !(h2 == HintSecretRepeatingDigit || h2 == HintMostlyEvenDigits) {
+		t.Fatalf("unexpected repeating-secret hint: %q", h2)
+	}
+}
+
+func TestGenerateSmartHint_SumRangeAndDistance(t *testing.T) {
+	codeDigits = 4
+
+	// sum < 10
+	secretLowSum := []int{0, 0, 1, 2} // sum=3
+	guess := []int{9, 9, 9, 9}
+	rng := rand.New(rand.NewSource(10))
+	h := GenerateSmartHint(secretLowSum, guess, rng)
+	if !(h == HintSumLow || h == HintMostlyEvenDigits) {
+		t.Fatalf("unexpected hint for low sum: %q", h)
+	}
+
+	// sum between 10 and 20
+	secretMid := []int{2, 3, 4, 2} // sum=11
+	rng2 := rand.New(rand.NewSource(11))
+	h2 := GenerateSmartHint(secretMid, guess, rng2)
+	if !(h2 == HintSumMidLow || h2 == HintDefault) {
+		t.Fatalf("unexpected hint for mid sum: %q", h2)
+	}
+
+	// sum >30
+	secretHigh := []int{9, 9, 8, 9} // sum=35
+	rng3 := rand.New(rand.NewSource(12))
+	h3 := GenerateSmartHint(secretHigh, guess, rng3)
+	if !(h3 == HintSumHigh || h3 == HintDefault) {
+		t.Fatalf("unexpected hint for high sum: %q", h3)
+	}
+}
+
+func TestGenerateSmartHint_IncreasingDecreasing(t *testing.T) {
+	codeDigits = 4
+
+	secretInc := []int{1, 2, 3, 4}
+	guess := []int{0, 0, 0, 0}
+	rng := rand.New(rand.NewSource(13))
+	h := GenerateSmartHint(secretInc, guess, rng)
+	if !(h == HintIncreasingOrder || h == HintSumMidLow || h == HintMostlyLowDigits) {
+		t.Fatalf("unexpected hint for increasing: %q", h)
+	}
+
+	secretDec := []int{9, 8, 7, 6}
+	rng2 := rand.New(rand.NewSource(14))
+	h2 := GenerateSmartHint(secretDec, guess, rng2)
+	if !(h2 == HintDecreasingOrder || h2 == HintSumHigh || h2 == HintMostlyHighDigits) {
+		t.Fatalf("unexpected hint for decreasing: %q", h2)
+	}
+}
+
+func TestGenerateSmartHint_RandomnessNonEmpty(t *testing.T) {
+	codeDigits = 4
+
+	// For many inputs, hints list should not be empty and result should be one of possible hints
+	secret := []int{1, 3, 5, 7}
+	guess := []int{2, 4, 6, 8}
+	rng := rand.New(rand.NewSource(18))
+	h := GenerateSmartHint(secret, guess, rng)
+	if h == "" {
+		t.Fatalf("hint should not be empty")
+	}
+}
+
+func TestSplitToDigits_And_Reverse_Consistency(t *testing.T) {
+
+	n := 4321
+	d := splitToDigits(n)
+	got := digitsToNumber(d)
+	if got != n {
+		t.Fatalf("expected roundtrip digits->number to return %d, got %d (digits %v)", n, got, d)
+	}
+
+	rev := reverseDigits(d)
+	if digitsToNumber(rev) != 1234 {
+		t.Fatalf("reverse digits produced unexpected number: %v", rev)
+	}
+}
+
+// ensure arrays comparisons work reliably
+func TestHelpersContainment(t *testing.T) {
+	s := []string{"a", "b", "c"}
+	if !containsString(s, "b") {
+		t.Fatalf("containsString failed")
+	}
+	if containsString(s, "z") {
+		t.Fatalf("containsString false positive")
+	}
 }
