@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ccs_interview/game"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,7 +11,7 @@ import (
 )
 
 func main() {
-	players := 2 // default
+	players := game.MaxPlayers // default
 
 	if len(os.Args) >= 2 {
 		n, err := strconv.Atoi(os.Args[1])

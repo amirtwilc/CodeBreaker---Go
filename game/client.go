@@ -20,13 +20,13 @@ func StartClient(address string) error {
 
 	decoder := json.NewDecoder(conn)
 
-	// ✅ Channel for server messages
+	// Channel for server messages
 	serverMsgCh := make(chan Message)
 
-	// ✅ Channel for user input
+	// Channel for user input
 	inputCh := make(chan string)
 
-	// ✅ SERVER READER GOROUTINE (never blocks main loop)
+	// Server reader goroutine (never blocks main loop)
 	go func() {
 		for {
 			var msg Message
@@ -38,7 +38,7 @@ func StartClient(address string) error {
 		}
 	}()
 
-	// ✅ STDIN READER GOROUTINE (never blocks main loop)
+	// Stdin reader goroutine (never blocks main loop)
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
 		for {
@@ -54,11 +54,11 @@ func StartClient(address string) error {
 	isMyTurn := false
 	lastPrinted := Message{}
 
-	// ✅ SINGLE EVENT LOOP — handles BOTH server + user input
+	// Single event loop — handles BOTH server + user input
 	for {
 		select {
 
-		// ✅ SERVER MESSAGE
+		// Server message
 		case msg, ok := <-serverMsgCh:
 			if !ok {
 				return fmt.Errorf("server disconnected")
@@ -76,7 +76,7 @@ func StartClient(address string) error {
 				fmt.Print("Your guess: ")
 
 			case "RECOVERY":
-				// ✅ SPECIAL MODE: allow ANY player to type
+				// Allow ANY player to type
 				isMyTurn = true
 				fmt.Print("Recovery guess allowed: ")
 
@@ -84,7 +84,7 @@ func StartClient(address string) error {
 				isMyTurn = false
 			}
 
-		// USER INPUT
+		// User input
 		case guess, ok := <-inputCh:
 			if !ok {
 				return nil

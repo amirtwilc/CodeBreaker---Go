@@ -13,7 +13,7 @@ type Difficulty string
 const (
 	TimePrefixLabel             = "TIME"
 	TimePrefixFormat            = TimePrefixLabel + ": %s - "
-	TimeLayout                  = "15:04:05" // ✅ HH:mm:ss in Go format
+	TimeLayout                  = "15:04:05" // HH:mm:ss in Go format
 	DifficultyEasy   Difficulty = "easy"
 	DifficultyMedium Difficulty = "medium"
 	DifficultyHard   Difficulty = "hard"
@@ -45,9 +45,9 @@ const (
 
 // default values
 var codeDigits = 4
-var minCode int = 1000
-var maxCode int = 9999
-var codeRange int = 9000 // MaxCode - MinCode + 1
+var minCode = 1000
+var maxCode = 9999
+var codeRange = 9000 // MaxCode - MinCode + 1
 
 type Feedback struct {
 	CorrectPlace int
@@ -97,15 +97,12 @@ func ValidateGuess(input string) (int, error) {
 	return guess, nil
 }
 
-func GenerateSecretCode() int {
-	return GenerateSecretCodeWithDifficulty(4, DifficultyMedium)
-}
-
 func GenerateSecretCodeWithDifficulty(codeLength int, d Difficulty) int {
 	for {
 		if d == DifficultyHard && codeLength < 3 {
 			panic("Hard difficulty must have at least 3 digits")
 		}
+
 		SetCodeDigits(codeLength)
 
 		base := rand.Intn(codeRange) + minCode
@@ -115,7 +112,7 @@ func GenerateSecretCodeWithDifficulty(codeLength int, d Difficulty) int {
 
 		var modified []int
 
-		// MEDIUM RULE (existing logic)
+		// Business requirement - based on even or odd number
 		if sum%2 == 0 {
 			modified = reverseDigits(digits)
 		} else {
@@ -124,12 +121,12 @@ func GenerateSecretCodeWithDifficulty(codeLength int, d Difficulty) int {
 
 		final := digitsToNumber(modified)
 
-		// Palindrome override rule (applies to all difficulties)
+		// Business requirement - Palindrome override rule (applies to all difficulties)
 		if isPalindrome(final) {
 			final = 7777
 		}
 
-		//in case final is not in correct size
+		//in case final is not in correct size - try again
 		if final < minCode || final > maxCode {
 			continue
 		}
@@ -231,6 +228,7 @@ func hasRepeatingDigit(n int) bool {
 	return false
 }
 
+// GenerateFeedback provides a feedback regarding the guess
 func GenerateFeedback(secret, guess int, rng *rand.Rand) Feedback {
 	secretDigits := splitToDigits(secret)
 	guessDigits := splitToDigits(guess)
@@ -241,7 +239,7 @@ func GenerateFeedback(secret, guess int, rng *rand.Rand) Feedback {
 	correctPlace := 0
 	wrongPlace := 0
 
-	// Pass 1: correct place
+	// Check guess place correctness
 	for i := 0; i < codeDigits; i++ {
 		if secretDigits[i] == guessDigits[i] {
 			correctPlace++
@@ -250,7 +248,7 @@ func GenerateFeedback(secret, guess int, rng *rand.Rand) Feedback {
 		}
 	}
 
-	// Pass 2: misplaced digits
+	// Check guess misplaced digits
 	for i := 0; i < codeDigits; i++ {
 		if usedGuess[i] {
 			continue
@@ -268,7 +266,6 @@ func GenerateFeedback(secret, guess int, rng *rand.Rand) Feedback {
 		}
 	}
 
-	// Hint logic
 	hint := GenerateSmartHint(secretDigits, guessDigits, rng)
 
 	return Feedback{
@@ -307,7 +304,7 @@ func GenerateSmartHint(secretDigits, guessDigits []int, rng *rand.Rand) string {
 		)
 	}
 
-	// 3️⃣ Even / Odd distribution
+	// Even / Odd distribution
 	evenCount := 0
 	for _, d := range secretDigits {
 		if d%2 == 0 {
@@ -322,7 +319,7 @@ func GenerateSmartHint(secretDigits, guessDigits []int, rng *rand.Rand) string {
 		hints = append(hints, HintMostlyOddDigits)
 	}
 
-	// 4️⃣ Repetition analysis
+	// Repetition analysis
 	secretMap := make(map[int]int)
 	guessMap := make(map[int]int)
 
@@ -349,7 +346,7 @@ func GenerateSmartHint(secretDigits, guessDigits []int, rng *rand.Rand) string {
 		}
 	}
 
-	// 5️⃣ High vs Low majority
+	// High vs Low majority
 	high := 0
 	low := 0
 	for _, d := range secretDigits {
@@ -367,7 +364,7 @@ func GenerateSmartHint(secretDigits, guessDigits []int, rng *rand.Rand) string {
 		hints = append(hints, HintMostlyLowDigits)
 	}
 
-	// 6️⃣ Sum of secret digits (range, not exact)
+	// Sum of secret digits (range, not exact)
 	sum := 0
 	for _, d := range secretDigits {
 		sum += d
@@ -384,7 +381,7 @@ func GenerateSmartHint(secretDigits, guessDigits []int, rng *rand.Rand) string {
 		hints = append(hints, HintSumHigh)
 	}
 
-	// 7️⃣ Increasing / decreasing pattern
+	// Increasing / decreasing pattern
 	if isStrictlyIncreasing(secretDigits) {
 		hints = append(hints, HintIncreasingOrder)
 	}
@@ -392,7 +389,7 @@ func GenerateSmartHint(secretDigits, guessDigits []int, rng *rand.Rand) string {
 		hints = append(hints, HintDecreasingOrder)
 	}
 
-	// RANDOMIZE HINT SELECTION
+	// Randomize hints - decrease chance of receiving same hint every time
 	rng.Shuffle(len(hints), func(i, j int) {
 		hints[i], hints[j] = hints[j], hints[i]
 	})

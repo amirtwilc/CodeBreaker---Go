@@ -43,7 +43,7 @@ func TestGenerateSecretCode_Hard_Constraints(t *testing.T) {
 }
 
 func TestHasRepeatingDigit(t *testing.T) {
-	SetCodeDigits(4)
+	codeDigits = 4
 	assert.True(t, hasRepeatingDigit(1123))
 	assert.True(t, hasRepeatingDigit(9009))
 	assert.False(t, hasRepeatingDigit(1234))
@@ -91,7 +91,7 @@ func TestDigitSum_Odd(t *testing.T) {
 }
 
 func TestReverseDigits(t *testing.T) {
-	SetCodeDigits(4)
+	codeDigits = 4
 	in := []int{1, 2, 3, 4}
 	out := reverseDigits(in)
 
@@ -166,7 +166,7 @@ func TestOddSumIncrementWithWrap(t *testing.T) {
 }
 
 func TestValidateGuess(t *testing.T) {
-	SetCodeDigits(4)
+	codeDigits = 4
 	tests := []struct {
 		name        string
 		input       string
