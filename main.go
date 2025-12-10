@@ -16,7 +16,7 @@ func main() {
 
 	switch mode {
 	case "server":
-		game.StartServer() // Start the server, handling one player for now
+		game.StartServer()
 	case "client":
 		addr := os.Getenv("CODEBREAKER_ADDR")
 		if addr == "" {

@@ -71,16 +71,16 @@ func StartClient(address string) error {
 			}
 
 			switch msg.Type {
-			case "TURN":
+			case TURN:
 				isMyTurn = true
 				fmt.Print("Your guess: ")
 
-			case "RECOVERY":
+			case RECOVERY:
 				// Allow ANY player to type
 				isMyTurn = true
 				fmt.Print("Recovery guess allowed: ")
 
-			case "WAIT", "TIMEOUT", "RESULT", "WIN", "NEWGAME", "INFO":
+			case WAIT, TIMEOUT, RESULT, WIN, NEWGAME, INFO:
 				isMyTurn = false
 			}
 
