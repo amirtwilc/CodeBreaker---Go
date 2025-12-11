@@ -1,7 +1,7 @@
 package main
 
 import (
-	"ccs_interview/game"
+	"code_breaker/internal/net"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	players := game.MaxPlayers // default
+	players := netpkg.MaxPlayers // default
 
 	if len(os.Args) >= 2 {
 		n, err := strconv.Atoi(os.Args[1])
@@ -22,12 +22,12 @@ func main() {
 
 	fmt.Printf("Starting CodeBreaker with %d players...\n", players)
 
-	openTerminal("go run main.go server")
+	openTerminal("go run ./cmd/server")
 
 	time.Sleep(2 * time.Second)
 
 	for i := 1; i <= players; i++ {
-		openTerminal("go run main.go client")
+		openTerminal("go run ./cmd/client")
 	}
 }
 
@@ -37,8 +37,6 @@ func openTerminal(command string) {
 	switch runtime.GOOS {
 
 	case "windows":
-		// ✅ IMPORTANT FIX:
-		// "" is an EMPTY WINDOW TITLE so the command actually runs
 		cmd = exec.Command(
 			"cmd",
 			"/C",
@@ -49,14 +47,14 @@ func openTerminal(command string) {
 			command,
 		)
 
-	case "darwin": // macOS
+	case "darwin": // macOS (was not tested)
 		cmd = exec.Command(
 			"osascript",
 			"-e",
 			fmt.Sprintf(`tell app "Terminal" to do script "%s"`, command),
 		)
 
-	default: // Linux
+	default: // Linux (was not tested)
 		cmd = exec.Command(
 			"x-terminal-emulator",
 			"-e",

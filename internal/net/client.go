@@ -1,4 +1,4 @@
-package game
+package netpkg // Package netpkg to void conflict with standard net package
 
 import (
 	"bufio"
@@ -7,12 +7,15 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"code_breaker/internal/game"
 )
 
+// StartClient connects to server and runs the client loop
 func StartClient(address string) error {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		return fmt.Errorf("error connecting to server: %v", err)
+		return fmt.Errorf("error connecting to server: %w", err)
 	}
 	defer conn.Close()
 
@@ -20,16 +23,13 @@ func StartClient(address string) error {
 
 	decoder := json.NewDecoder(conn)
 
-	// Channel for server messages
-	serverMsgCh := make(chan Message)
-
-	// Channel for user input
+	serverMsgCh := make(chan game.Message)
 	inputCh := make(chan string)
 
-	// Server reader goroutine (never blocks main loop)
+	// Server reader
 	go func() {
 		for {
-			var msg Message
+			var msg game.Message
 			if err := decoder.Decode(&msg); err != nil {
 				close(serverMsgCh)
 				return
@@ -38,7 +38,7 @@ func StartClient(address string) error {
 		}
 	}()
 
-	// Stdin reader goroutine (never blocks main loop)
+	// Stdin reader
 	go func() {
 		reader := bufio.NewReader(os.Stdin)
 		for {
@@ -52,56 +52,44 @@ func StartClient(address string) error {
 	}()
 
 	isMyTurn := false
-	lastPrinted := Message{}
+	lastPrinted := game.Message{}
 
-	// Single event loop — handles BOTH server + user input
 	for {
 		select {
-
-		// Server message
 		case msg, ok := <-serverMsgCh:
 			if !ok {
 				return fmt.Errorf("server disconnected")
 			}
-
-			// Always print server text
+			// Always print server text — avoid duplicates
 			if msg.Type != lastPrinted.Type || msg.Text != lastPrinted.Text {
 				fmt.Print(msg.Text)
 				lastPrinted = msg
 			}
 
 			switch msg.Type {
-			case TURN:
+			case game.TURN:
 				isMyTurn = true
 				fmt.Print("Your guess: ")
-
-			case RECOVERY:
-				// Allow ANY player to type
+			case game.RECOVERY:
 				isMyTurn = true
 				fmt.Print("Recovery guess allowed: ")
-
-			case WAIT, TIMEOUT, RESULT, WIN, NEWGAME, INFO:
+			case game.WAIT, game.TIMEOUT, game.RESULT, game.WIN, game.NEWGAME, game.INFO:
 				isMyTurn = false
 			}
 
-		// User input
 		case guess, ok := <-inputCh:
 			if !ok {
 				return nil
 			}
-
 			if !isMyTurn {
-				// Input when it's NOT your turn → safely ignore
+				// ignore when not turn
 				continue
 			}
-
 			isMyTurn = false
-
 			if guess == "exit" {
 				fmt.Println("Exiting game...")
 				return nil
 			}
-
 			_, err = conn.Write([]byte(guess + "\n"))
 			if err != nil {
 				return err

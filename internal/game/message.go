@@ -1,5 +1,6 @@
 package game
 
+// MessageType represents the type of message sent to clients.
 type MessageType string
 
 const (
@@ -13,7 +14,8 @@ const (
 	RECOVERY MessageType = "RECOVERY"
 )
 
+// Message is the JSON-serializable message sent to clients.
 type Message struct {
-	Type MessageType `json:"type"` // TURN, RECOVERY, WAIT, RESULT, WIN, TIMEOUT, NEWGAME, INFO
-	Text string      `json:"text"` // Human readable message
+	Type MessageType `json:"type"`
+	Text string      `json:"text"`
 }
