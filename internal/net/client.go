@@ -60,7 +60,7 @@ func StartClient(address string) error {
 			if !ok {
 				return fmt.Errorf("server disconnected")
 			}
-			// Always print server text — avoid duplicates
+			// Always print server text
 			if msg.Type != lastPrinted.Type || msg.Text != lastPrinted.Text {
 				fmt.Print(msg.Text)
 				lastPrinted = msg

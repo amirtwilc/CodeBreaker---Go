@@ -141,7 +141,7 @@ func GenerateSecretCodeWithDifficulty(codeLength int, d Difficulty) int {
 	}
 }
 
-// Helpers: convert number <-> digits and small predicates (kept original behavior)
+// Helpers
 func splitToDigits(n int) []int {
 	out := make([]int, codeDigits)
 	for i := codeDigits - 1; i >= 0; i-- {
