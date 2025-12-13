@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	addr := os.Getenv("CODEBREAKER_ADDR")
+	addr := os.Getenv("SERVER_ADDR")
 	if addr == "" {
 		addr = "localhost:8080"
 	}

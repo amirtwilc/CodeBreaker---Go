@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codebreaker-server
+  namespace: codebreaker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: codebreaker-server
+  template:
+    metadata:
+      labels:
+        app: codebreaker-server
+    spec:
+      containers:
+        - name: server
+          image: codebreaker-server:latest
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef:
+                name: server-config
+          command: ["/app/server"]
+          stdin: true
+          tty: true

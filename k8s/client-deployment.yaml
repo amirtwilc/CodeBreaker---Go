@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: codebreaker-client
+  namespace: codebreaker
+spec:
+  serviceName: "codebreaker-client"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: codebreaker-client
+  template:
+    metadata:
+      labels:
+        app: codebreaker-client
+    spec:
+      containers:
+        - name: client
+          image: codebreaker-client:latest
+          imagePullPolicy: Never
+          env:
+            - name: SERVER_ADDR
+              value: "codebreaker-server:8080"
+          stdin: true
+          tty: true

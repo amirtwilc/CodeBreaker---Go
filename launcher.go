@@ -1,7 +1,6 @@
 package main
 
 import (
-	"code_breaker/internal/net"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,23 +9,26 @@ import (
 	"time"
 )
 
+const (
+	MaxPlayers      = 2
+	CodeLength      = "5"
+	Difficulty      = "easy"
+	TurnTimeSeconds = "10"
+)
+
 func main() {
-	players := netpkg.MaxPlayers // default
+	os.Setenv("MAX_PLAYERS", strconv.Itoa(MaxPlayers))
+	os.Setenv("CODE_LENGTH", CodeLength)
+	os.Setenv("Difficulty", Difficulty)
+	os.Setenv("TURN_TIME_SECONDS", TurnTimeSeconds)
 
-	if len(os.Args) >= 2 {
-		n, err := strconv.Atoi(os.Args[1])
-		if err == nil && n > 0 {
-			players = n
-		}
-	}
-
-	fmt.Printf("Starting CodeBreaker with %d players...\n", players)
+	fmt.Printf("Starting CodeBreaker with %d players...\n", MaxPlayers)
 
 	openTerminal("go run ./cmd/server")
 
 	time.Sleep(2 * time.Second)
 
-	for i := 1; i <= players; i++ {
+	for i := 1; i <= MaxPlayers; i++ {
 		openTerminal("go run ./cmd/client")
 	}
 }

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: server-config
+  namespace: codebreaker
+data:
+  MAX_PLAYERS: "3"
+  CODE_LENGTH: "4"
+  DIFFICULTY: "easy"
+  TURN_TIME_SECONDS: "100"

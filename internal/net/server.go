@@ -13,14 +13,8 @@ import (
 	"code_breaker/internal/game"
 )
 
-const (
-	MaxPlayers      = 3
-	CodeLength      = 4
-	difficulty      = game.DifficultyHard
-	TurnTimeSeconds = 15
-)
+var cfg game.Config
 
-// Color constants kept verbatim
 const (
 	ColorReset  = "\033[0m"
 	ColorRed    = "\033[31m"
@@ -44,13 +38,15 @@ type Analytics struct {
 }
 
 func StartServer() {
+	cfg = game.LoadConfig()
 	listener, err := net.Listen("tcp", "0.0.0.0:8080")
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
 	defer listener.Close()
 
-	fmt.Printf("Server started. Waiting for %d players...\n", MaxPlayers)
+	fmt.Printf("Server started. \nSettings: codeLength=%d | difficulty=%s | TurnTimeSeconds=%d \nWaiting for %d players...\n",
+		cfg.CodeLength, cfg.Difficulty, cfg.TurnTimeSeconds, cfg.MaxPlayers)
 
 	gameRng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	var players []*Player
@@ -62,7 +58,7 @@ func StartServer() {
 	}
 
 	// Accept players
-	for len(players) < MaxPlayers {
+	for len(players) < cfg.MaxPlayers {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Fatalf("Error accepting connection: %v", err)
@@ -84,8 +80,8 @@ func StartServer() {
 	consecutiveTimeouts := 0
 
 	for {
-		game.SetCodeDigits(CodeLength)
-		secret := game.GenerateSecretCodeWithDifficulty(CodeLength, difficulty)
+		game.SetCodeDigits(cfg.CodeLength)
+		secret := game.GenerateSecretCodeWithDifficulty(cfg.CodeLength, cfg.Difficulty)
 		log.Printf("DEBUG NEW SECRET: %d\n", secret)
 		currentGameGuesses := 0
 
@@ -95,7 +91,9 @@ func StartServer() {
 			currentPlayer := players[currentTurn]
 			notifyTurns(players, currentPlayer)
 
-			_ = currentPlayer.conn.SetReadDeadline(time.Now().Add(time.Second * TurnTimeSeconds))
+			if cfg.MaxPlayers > 1 {
+				_ = currentPlayer.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(cfg.TurnTimeSeconds)))
+			}
 			buffer := make([]byte, 1024)
 			n, err := currentPlayer.conn.Read(buffer)
 
@@ -105,7 +103,7 @@ func StartServer() {
 				consecutiveTimeouts++
 				if consecutiveTimeouts >= len(players) {
 					handleRecovery(players, secret, &currentTurn, &consecutiveTimeouts, analytics, gameRng, &currentGameGuesses)
-					break
+					continue
 				}
 				currentTurn = (currentTurn + 1) % len(players)
 				drainLateInput(currentPlayer.conn)
@@ -131,7 +129,7 @@ func StartServer() {
 			currentGameGuesses++
 
 			feedback := game.GenerateFeedback(secret, numGuess, gameRng)
-			if feedback.CorrectPlace == CodeLength {
+			if feedback.CorrectPlace == cfg.CodeLength {
 				handleWin(players, currentPlayer, secret, analytics, currentGameGuesses)
 				time.Sleep(3 * time.Second)
 				currentTurn = (currentTurn + 1) % len(players)
@@ -185,7 +183,7 @@ func handleRecovery(players []*Player, secret int, currentTurn *int, consecutive
 
 	*currentGameGuesses++
 	feedback := game.GenerateFeedback(secret, numGuess, gameRng)
-	if feedback.CorrectPlace == CodeLength {
+	if feedback.CorrectPlace == cfg.CodeLength {
 		handleWin(players, resumePlayer, secret, analytics, *currentGameGuesses)
 		time.Sleep(3 * time.Second)
 		*currentTurn = resumePlayer.id % len(players)

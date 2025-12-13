@@ -1,35 +1,47 @@
-version: "3.9"
+networks:
+  codebreaker_net:
+    driver: bridge
 
 services:
   server:
-    build: .
-    image: codebreaker-game
+    build:
+      context: .
+      dockerfile: cmd/server/Dockerfile
     container_name: codebreaker-server
     ports:
       - "8080:8080"
-    command: ["server"]
-
-  # Optional: example interactive client containers.
-  # In practice it's much nicer to run clients on the host.
+    environment:
+      MAX_PLAYERS: 2
+      CODE_LENGTH: 4
+      DIFFICULTY: easy
+      TURN_TIME_SECONDS: 20
+    networks:
+      - codebreaker_net
 
   client1:
-    image: codebreaker-game
-    container_name: codebreaker-client1
-    depends_on:
-      - server
+    build:
+      context: .
+      dockerfile: cmd/client/Dockerfile
+    container_name: client1
     stdin_open: true
     tty: true
     environment:
-      - CODEBREAKER_ADDR=codebreaker-server:8080
-    command: ["client"]
+      SERVER_ADDR: host.docker.internal:8080
+    depends_on:
+      - server
+    networks:
+      - codebreaker_net
 
   client2:
-    image: codebreaker-game
-    container_name: codebreaker-client2
-    depends_on:
-      - server
+    build:
+      context: .
+      dockerfile: cmd/client/Dockerfile
+    container_name: client2
     stdin_open: true
     tty: true
     environment:
-      - CODEBREAKER_ADDR=codebreaker-server:8080
-    command: ["client"]
+      SERVER_ADDR: host.docker.internal:8080
+    depends_on:
+      - server
+    networks:
+      - codebreaker_net
