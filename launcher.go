@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	MaxPlayers      = 2
+	MaxPlayers      = 1
 	CodeLength      = "5"
 	Difficulty      = "easy"
 	TurnTimeSeconds = "10"

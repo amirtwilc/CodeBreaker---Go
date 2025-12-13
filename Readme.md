@@ -65,9 +65,7 @@ Although `launcher.go` includes support for macOS and Linux, those platforms wer
 3. Run the Server: <br/>
    docker run -it --rm -p 8080:8080 codebreaker-server:latest
 4. For each player open a terminal and run: <br/>
-   docker run -it --rm \
-   -e SERVER_ADDR=host.docker.internal:8080 \
-   codebreaker-client:latest <br/><br/>
+   docker run -it --rm -e SERVER_ADDR=host.docker.internal:8080 codebreaker-client:latest <br/><br/>
    `host.docker.internal` allows Docker containers to reach the server running on the host machine.
 
 
@@ -89,6 +87,8 @@ Although `launcher.go` includes support for macOS and Linux, those platforms wer
 4. Each client runs in interactive mode. To play, attach a terminal to each client container: <br/>
    docker compose attach client1 <br/>
    docker compose attach client2
+   **note**: to see the logs before attaching the terminal: <br/>
+   docker compose logs client1
 
 ### With Kubernetes
 
